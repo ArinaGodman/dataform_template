@@ -1,0 +1,83 @@
+# This file must to be changed for each project
+defaultProject: conversionista-se
+defaultLocation: EU
+defaultDataset: dataform_funnels_c_test_Arina
+dataformCoreVersion: 3.0.0
+
+vars:
+  sourceDataset: analytics_440541972
+  sourceTable: events_*
+  funnelStages: "page_view, menu_navigation, blog_card_click "
+  granularity: "weekly" # also weekly and monthly
+  
+  # If you want to add customized events (those that are not specifically tracked),
+  # you need to change the function generateSelectColumns in general_functions.js
+
+  #dimensions : "own_brand"
+  dimensions : "device.category"
+  dateRangeStart: "20241101"
+  dateRangeEnd: "20241120"
+  daysAgo : "1" #latest available data
+
+  columnsToExtract: '{
+    "event_params": [
+      {"name": "ga_session_id", "type": "int_value"},
+      {"name": "page_location", "type": "string_value"}
+    ],
+    "item.item_params": [
+      {"name": "own_brand", "type": "int_value"}
+    ]
+    }'
+
+  filters: '{
+    #"geo.country": ["Sweden", "Norway"],
+    "device.category": ["mobile", "desktop"]
+  }'
+
+   # Add metrics (revenue; item_quantity) in case you need them
+  stagedColumns: '[
+    {"name": "event_date", "description": "Date of the event"},
+    {"name": "event_timestamp", "description": "Timestamp of the event"},
+    {"name": "event_name", "description": "Name of the events"},
+    {"name": "user_pseudo_id", "description": "User ID"},
+    {"name": "ga_session_id", "description": "Session ID"},
+    {"name": "own_brand", "description": "Net-on-Nets own drand"},
+    {"name": "page_location", "description": "Page location"},
+    {"name": "device.category", "description": "Device"}
+  ]'
+
+
+  columnMappings: '{
+    "date": "event_date",
+    "timestamp" : "event_timestamp",
+    "event_name": "event_name",
+    "user_id": "user_pseudo_id",
+    "session_id": "ga_session_id",
+    "purchase_revenue":"ecommerce.purchase_revenue",
+    "total_quantity": "ecommerce.total_item_quantity",
+    "own_brand": "own_brand"
+  }'
+  
+  
+# Future configurations
+# 
+# tags:
+#   - ga4
+#   - funnel_analysis
+# 
+# schedules:
+#   - name: daily_update
+#     cron: "0 2 * * *"
+#     tags: 
+#       - daily
+# 
+# environments:
+#   production:
+#     defaultConfig:
+#       tags: 
+#         - production
+#   development:
+#     defaultConfig:
+#       tags: 
+#         - development
+#       suffix: _dev
