@@ -1,5 +1,5 @@
 # This file must to be changed for each project
-defaultProject: conversionista-se
+defaultProject: my-project-se 
 defaultLocation: EU
 defaultDataset: dataform_funnels_c_test_Arina
 dataformCoreVersion: 3.0.0
