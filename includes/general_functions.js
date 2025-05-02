@@ -49,14 +49,14 @@ function generateSelectColumns(stagedColumns, columnMappings, columnsToExtract) 
     // Check if page_location is available in columnsToExtract
     const pageLocationAvailable = columnsToExtract.event_params && columnsToExtract.event_params.some(c => c.name === 'page_location');
 
-    if (pageLocationAvailable) {
+   // if (pageLocationAvailable) {
         // Customized events logic - only applied if page_location is available
-        eventNameSelect = `CASE
-            WHEN (SELECT value.string_value FROM UNNEST(event_params) WHERE key = 'page_location') LIKE 'https://www.netonnet.se/checkout/customer' THEN 'enter_customer_information'
-            WHEN (SELECT value.string_value FROM UNNEST(event_params) WHERE key = 'page_location') LIKE 'https://www.netonnet.se/checkout/confirmation' AND ${mapColumnName('event_name', columnMappings)} = 'page_view' THEN 'customer_confirmation'
-            ELSE ${mapColumnName('event_name', columnMappings)}
-        END`;
-    }
+      //  eventNameSelect = `CASE
+       //     WHEN (SELECT value.string_value FROM UNNEST(event_params) WHERE key = 'page_location') LIKE 'https://www.netonnet.se/checkout/customer' THEN 'enter_customer_information'
+       //     WHEN (SELECT value.string_value FROM UNNEST(event_params) WHERE key = 'page_location') LIKE 'https://www.netonnet.se/checkout/confirmation' AND ${mapColumnName('event_name', columnMappings)} = 'page_view' THEN 'customer_confirmation'
+       //     ELSE ${mapColumnName('event_name', columnMappings)}
+       // END`;
+   // }
 
     if (eventNameColumn) {
         eventNameSelect += ` AS ${eventNameColumn}`;
@@ -67,9 +67,15 @@ function generateSelectColumns(stagedColumns, columnMappings, columnsToExtract) 
 
 // Function to generate final SQL SELECT columns with sanitization
 function generateFinalSelectColumns(stagedColumns) {
-    return stagedColumns.map(column =>
-        column.name.includes('.') ? sanitizeColumnName(column.name) : column.name
-    ).join(',\n  ');
+    return stagedColumns.map(column => {
+        // Check if the column name includes 'date'
+        if (column.name.toLowerCase().includes('date')) {
+            // Use PARSE_DATE to convert 'YYYYMMDD' format to DATE
+            return `PARSE_DATE('%Y%m%d', CAST(${column.name} AS STRING)) AS ${sanitizeColumnName(column.name)}`;
+        }
+        // Sanitize column names that include a dot
+        return column.name.includes('.') ? sanitizeColumnName(column.name) : column.name;
+    }).join(',\n  ');
 }
 
 // Function to generate a filter for funnel stages
@@ -91,66 +97,38 @@ function generateFilters(filters) {
 }
 
 
-// (NOT USED) Function to get the date of X days ago in YYYYMMDD format 
+// Function to get the date of X days ago in YYYYMMDD format
 function getDateDaysAgo(daysAgo) {
     const days = parseInt(daysAgo, 10);
     const today = new Date();
     const pastDate = new Date(today.setDate(today.getDate() - days));
-    return pastDate.toISOString().slice(0, 10).replace(/-/g, "");
+    return pastDate.toISOString().slice(0, 10);
 }
 
-function getIncrementalDateRange(granularity, daysAgo) {
-    const currentDate = new Date();
-    const latestDataDate = new Date(currentDate);
-    latestDataDate.setDate(latestDataDate.getDate() - daysAgo);
-    
-    let startDate, endDate;
-
-    switch(granularity) {
-        case 'daily':
-            startDate = endDate = formatDate(latestDataDate);
-            break;
-        case 'weekly':
-            // Find the most recent completed ISO week
-            endDate = new Date(currentDate);
-            endDate.setDate(currentDate.getDate() - ((currentDate.getDay() + 6) % 7) - 1); // Last Sunday
-            startDate = new Date(endDate);
-            startDate.setDate(endDate.getDate() - 6); // Monday of the same week
-            
-            // Ensure we're not fetching data beyond latestDataDate
-            if (endDate > latestDataDate) {
-                endDate = new Date(startDate);
-                endDate.setDate(startDate.getDate() - 1); // Previous Sunday
-                startDate.setDate(startDate.getDate() - 7); // Previous Monday
-            }
-            
-            startDate = formatDate(startDate);
-            endDate = formatDate(endDate);
-            break;
-        case 'monthly':
-            // Get the first and last day of the previous month
-            endDate = new Date(currentDate.getFullYear(), currentDate.getMonth(), 0);
-            startDate = new Date(endDate.getFullYear(), endDate.getMonth(), 1);
-            
-            // Ensure we're not fetching data beyond latestDataDate
-            if (endDate > latestDataDate) {
-                endDate = new Date(startDate);
-                endDate.setDate(endDate.getDate() - 1);
-                startDate = new Date(endDate.getFullYear(), endDate.getMonth(), 1);
-            }
-            
-            startDate = formatDate(startDate);
-            endDate = formatDate(endDate);
-            break;
-        default:
-            throw new Error('Invalid granularity');
-    }
-
-    return { startDate, endDate };
+function getDateGrouping(dateColumn, granularity) {
+  switch (granularity.toLowerCase()) {
+    case 'weekly':
+      return `DATE_TRUNC(${dateColumn}, WEEK)`;
+    case 'monthly':
+      return `DATE_TRUNC(${dateColumn}, MONTH)`;
+    case 'daily':
+    default:
+      return `${dateColumn}`;  // No need to parse, just return the column as is
+  }
 }
 
-function formatDate(date) {
-    return date.toISOString().split('T')[0].replace(/-/g, '');
+function getPreviousMonthRange() {
+  const today = new Date();
+  const lastMonth = new Date(today.getFullYear(), today.getMonth() - 1, 1);
+  const startOfLastMonth = new Date(lastMonth.getFullYear(), lastMonth.getMonth(), 1);
+  const endOfLastMonth = new Date(today.getFullYear(), today.getMonth(), 0);
+
+  const formatDate = (date) => date.toISOString().slice(0, 10).replace(/-/g, '');
+
+  return {
+    start: formatDate(startOfLastMonth),
+    end: formatDate(endOfLastMonth)
+  };
 }
 // Export functions for reuse
 module.exports = {
@@ -161,6 +139,6 @@ module.exports = {
     generateFunnelStagesFilter,
     generateFilters,
     getDateDaysAgo,
-    getIncrementalDateRange,
-    formatDate
+    getDateGrouping,
+    getPreviousMonthRange
 };

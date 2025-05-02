@@ -1,8 +1,12 @@
 config {
     type: "incremental",
     name: "staged_data",
-    description: "Incremental table for staged data with extracted nested parameters, filtered by specified funnel stages"
+    description: "Incremental table for staged data with extracted nested parameters, filtered by specified funnel stages",
+    bigquery: { 
+         partitionBy: "event_date"
+     }
 }
+
 
 js {
     // Import functions from the external JavaScript file
@@ -14,7 +18,7 @@ js {
         generateFunnelStagesFilter,
         generateFilters,
         publishStagedData,
-        getIncrementalDateRange
+        getDateDaysAgo
     } = require('../includes/general_functions.js');
 
     const stagedColumns = JSON.parse(dataform.projectConfig.vars.stagedColumns);
@@ -22,7 +26,6 @@ js {
     const funnelStages = dataform.projectConfig.vars.funnelStages.split(',').map(stage => stage.trim());
     const columnMappings = JSON.parse(dataform.projectConfig.vars.columnMappings);
     const daysAgo = JSON.parse(dataform.projectConfig.vars.daysAgo);
-    const granularity = dataform.projectConfig.vars.granularity;
     const dimensions = dataform.projectConfig.vars.dimensions ?
         dataform.projectConfig.vars.dimensions.split(',').map(dim => dim.trim()).filter(dim => dim) : [];
     const filters = (() => {
@@ -33,7 +36,6 @@ js {
         }
     })();
 
-    const dateRange = getIncrementalDateRange(granularity, daysAgo);
 }
 
 WITH
@@ -45,7 +47,7 @@ WITH
   WHERE
     ${
         when(incremental(),
-            `_TABLE_SUFFIX BETWEEN '${dateRange.startDate}' AND '${dateRange.endDate}'`,
+            `_TABLE_SUFFIX = '${getDateDaysAgo(daysAgo)}'`,
             `_TABLE_SUFFIX BETWEEN '${dataform.projectConfig.vars.dateRangeStart}' AND '${dataform.projectConfig.vars.dateRangeEnd}'`
         )
     }

@@ -1,52 +1,34 @@
 config {
-    type: "incremental",
-    name: "closed_session_funnel",
-    description: "Closed session funnel based on staged GA4 data, grouped by date and specified dimensions",
-    dependencies: ["staged_data"]
+  type: "incremental",
+  name: "closed_session_funnel",
+  description: "Closed session funnel based on staged GA4 data, grouped by date and specified dimensions",
+  dependencies: ["staged_data"],
+  bigquery: { 
+         partitionBy: "event_date"
+     }
 }
 
 js {
-    const {
-        sanitizeColumnName,
-        mapColumnName,
-        getIncrementalDateRange
-    } = require('../includes/general_functions.js');
-    const {
-        generateStageCTEs,
-        generateFunnelQuery
-    } = require('../includes/funnel_functions.js');
+  const { sanitizeColumnName, mapColumnName, getDateDaysAgo } = require('../includes/general_functions.js');
+  const { generateStageCTEs, generateFunnelQuery } = require('../includes/funnel_functions.js');
 
-    const stagedColumns = JSON.parse(dataform.projectConfig.vars.stagedColumns);
-    const funnelStages = dataform.projectConfig.vars.funnelStages.split(',').map(stage => stage.trim());
-    const dimensions = dataform.projectConfig.vars.dimensions ?
-        dataform.projectConfig.vars.dimensions.split(',').map(dim => dim.trim()) : [];
-    const columnMappings = JSON.parse(dataform.projectConfig.vars.columnMappings);
-    const daysAgo = JSON.parse(dataform.projectConfig.vars.daysAgo);
-    const granularity = dataform.projectConfig.vars.granularity;
-    const dateRange = getIncrementalDateRange(granularity, daysAgo);
+  const stagedColumns = JSON.parse(dataform.projectConfig.vars.stagedColumns);
+  const funnelStages = dataform.projectConfig.vars.funnelStages.split(',').map(stage => stage.trim());
+  const dimensions = dataform.projectConfig.vars.dimensions ? 
+      dataform.projectConfig.vars.dimensions.split(',').map(dim => dim.trim()) : [];
+  const columnMappings = JSON.parse(dataform.projectConfig.vars.columnMappings);
+  const daysAgo = JSON.parse(dataform.projectConfig.vars.daysAgo);
 }
 
-WITH
+WITH 
 source_data AS (
-    SELECT
-        *,
-        CASE '${granularity}'
-    WHEN 'daily' THEN PARSE_DATE('%Y%m%d', ${sanitizeColumnName(mapColumnName('date', columnMappings))})
-    WHEN 'weekly' THEN DATE_TRUNC(PARSE_DATE('%Y%m%d', ${sanitizeColumnName(mapColumnName('date', columnMappings))}), ISOWEEK)
-    WHEN 'monthly' THEN DATE_TRUNC(PARSE_DATE('%Y%m%d', ${sanitizeColumnName(mapColumnName('date', columnMappings))}), MONTH)
-    ELSE PARSE_DATE('%Y%m%d', ${sanitizeColumnName(mapColumnName('date', columnMappings))})
-  END AS granular_date
-    FROM
-        ${ref("staged_data")}
-WHERE 
-  ${mapColumnName('date', columnMappings)} ${when(incremental(), 
-    `BETWEEN '${getIncrementalDateRange(granularity, daysAgo).startDate}' AND '${getIncrementalDateRange(granularity, daysAgo).endDate}'`,
-    `BETWEEN '${dataform.projectConfig.vars.dateRangeStart}' AND '${dataform.projectConfig.vars.dateRangeEnd}'`
+  SELECT *
+  FROM ${ref("staged_data")}
+  WHERE ${mapColumnName('date', columnMappings)} ${when(incremental(), 
+    `= '${getDateDaysAgo(daysAgo)}'`,
+    `BETWEEN PARSE_DATE('%Y%m%d', '${dataform.projectConfig.vars.dateRangeStart}') AND PARSE_DATE('%Y%m%d', '${dataform.projectConfig.vars.dateRangeEnd}')`
   )}
 ),
 ${generateStageCTEs(funnelStages, dimensions, columnMappings, 'session')}
+
 ${generateFunnelQuery(funnelStages, dimensions, columnMappings, 'session')}
-ORDER BY
-    granular_date,
-    event_name
-    ${dimensions.length > 0 ? ', ' + dimensions.map(dim => sanitizeColumnName(mapColumnName(dim, columnMappings))).join(', ') : ''}
